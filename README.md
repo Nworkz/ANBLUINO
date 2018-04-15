@@ -2,7 +2,7 @@
 
 Android bluetooth remote controller for arduinos
 
-![ANBLUINO Preview](https://www.facebook.com/photo.php?fbid=788773804660827&set=a.156561021215445.1073741835.100005846442762&type=3)
+![ANBLUINO Preview](https://github.com/NXIV-14/ANBLUINO/blob/master/ANBLUINO.png)
 
 Features:
 <ul>
