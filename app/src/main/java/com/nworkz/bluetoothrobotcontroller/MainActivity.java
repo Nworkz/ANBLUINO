@@ -1,6 +1,7 @@
 package com.nworkz.bluetoothrobotcontroller;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -9,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.icu.util.Output;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
@@ -16,6 +18,7 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -35,26 +38,33 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-public class MainActivity extends AppCompatActivity{
+public class MainActivity extends AppCompatActivity implements View.OnTouchListener{
 
 
-    final int MEASURE_DISTANCE = 1;
-    //
+    final int MEASURE_DISTANCE = 3;
     final int REQUEST_ENABLE_BT = 1;
     final int MY_PERMISSIONS_REQUEST_COARSE_LOCATION = 2;
+
     //private BluetoothSocket mSocket;
     private BluetoothAdapter mBluetoothAdapter;
     private Handler mHandler;
     List<BluetoothDevice> pairedDevicesList;
     BluetoothDevice connectWith;
+
     //UI
     ImageView up, down, left, right, a ,b;
     TextView  measurement, connectionStatus;
     Switch startConnection;
     Spinner BluetoothDevicesSpinner;
+
     //
     ConnectThread connectBluetooth;
     TransactionThread startTransaction;
+
+    //
+    double totalDistance = 0.0f;
+    int revCount = 0;
+    //boolean isForward = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,6 +74,31 @@ public class MainActivity extends AppCompatActivity{
 
 
         prepareUI();
+
+        mHandler = new Handler(){
+            @Override
+            public void handleMessage(Message msg) {
+
+                byte[] msgB = (byte[]) msg.obj;
+                switch (msg.what){
+                    case MEASURE_DISTANCE:
+                        String revString = new String(msgB);
+                        if(revString.charAt(0) == 'r'){
+                            revCount++;
+                            totalDistance = (0.055 * Math.PI) * (revCount/143);
+                        }else if(revString.charAt(0) == 't'){
+                            revCount--;
+                            totalDistance = (0.055 * Math.PI) * (revCount/143);
+                        }
+
+                        measurement.setText(String.format("%.3f",totalDistance));
+                        //measurement.setText(revCount + "");
+
+                        break;
+                }
+            }
+        };
+
         requestLocationPermission();
         UIInteraction();
     }
@@ -101,8 +136,10 @@ public class MainActivity extends AppCompatActivity{
         down = findViewById(R.id.down_button);
         left = findViewById(R.id.left_button);
         right = findViewById(R.id.right_button);
+
         a = findViewById(R.id.a_button);
         b = findViewById(R.id.b_button);
+
         connectionStatus = findViewById(R.id.connection_status);
         startConnection = findViewById(R.id.switch1);
         BluetoothDevicesSpinner = findViewById(R.id.spinner);
@@ -111,8 +148,10 @@ public class MainActivity extends AppCompatActivity{
 
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private void UIInteraction(){
         getPairedBluetoothDevices();
+
         BluetoothDevicesSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -133,52 +172,25 @@ public class MainActivity extends AppCompatActivity{
                     connectBluetooth.start();
                 }else{
                     connectBluetooth.cancel();
-                    connectBluetooth = null;
                 }
             }
         });
 
-        up.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("u");
-            }
-        });
 
-        down.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("d");
-            }
-        });
+        up.performClick();
+        down.performClick();
+        left.performClick();
+        right.performClick();
+        a.performClick();
+        b.performClick();
 
-        left.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("l");
-            }
-        });
+        up.setOnTouchListener(this);
+        down.setOnTouchListener(this);
+        left.setOnTouchListener(this);
+        right.setOnTouchListener(this);
+        a.setOnTouchListener(this);
+        b.setOnTouchListener(this);
 
-        right.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("r");
-            }
-        });
-
-        a.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("a");
-            }
-        });
-
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                connectBluetooth.mmtransactThread.write("b");
-            }
-        });
 
     }
 
@@ -231,57 +243,121 @@ public class MainActivity extends AppCompatActivity{
         BluetoothDevicesSpinner.setAdapter(adapter);
     }
 
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        if(event.getAction() == MotionEvent.ACTION_DOWN){
+            switch (v.getId()){
+                case R.id.up_button :
+                    //isForward = true;
+                    try{
+                        connectBluetooth.mmtransactThread.write("u");
+                    }catch (Exception e){
+                        Toast.makeText(this, "Not Connected", Toast.LENGTH_SHORT).show();
+                    }
+
+                    break;
+                case R.id.down_button :
+                    //isForward = false;
+                    try{
+                        connectBluetooth.mmtransactThread.write("d");
+                    }catch (Exception e){
+                        Toast.makeText(this, "Not Connected", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                case R.id.left_button :
+                    try{
+                        connectBluetooth.mmtransactThread.write("l");
+                    }catch (Exception e){
+                        Toast.makeText(this, "Not Connected", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                case R.id.right_button :
+                    try{
+                        connectBluetooth.mmtransactThread.write("r");
+                    }catch (Exception e){
+                        Toast.makeText(this, "Not Connected", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                case R.id.a_button:
+                    try{
+                        connectBluetooth.mmtransactThread.write("a");
+                    }catch(Exception e){}
+                    break;
+                case R.id.b_button:
+                    revCount = 0;
+                    totalDistance = 0;
+                    measurement.setText("0.000");
+                    break;
+            }
+        }
+        else if(event.getAction() == MotionEvent.ACTION_UP){
+            try{
+                connectBluetooth.mmtransactThread.write("x");
+            }catch (Exception e){}
+        }
+        return true;
+    }
+
     //connect
     private class ConnectThread extends Thread{
 
         private final BluetoothSocket mmSocket;
-        private final BluetoothDevice mmDevice;
+        //private final BluetoothDevice mmDevice;
         private final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-        public  TransactionThread mmtransactThread;
+        public TransactionThread mmtransactThread;
+
 
         public ConnectThread(BluetoothDevice device){
             BluetoothSocket tmpSocket = null;
-            mmDevice = device;
+            //mmDevice = device;
             try{
                 tmpSocket = device.createRfcommSocketToServiceRecord(MY_UUID);
             }catch (IOException e){}
 
             mmSocket = tmpSocket;
-
-            mmtransactThread = new TransactionThread(mmSocket);
-            mmtransactThread.start();
         }
 
         public void run(){
             mBluetoothAdapter.cancelDiscovery();
             try{
                 mmSocket.connect();
-                connectionStatus.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        connectionStatus.setText("Status: Connected");
-                        connectionStatus.setTextColor(Color.GREEN);
-                    }
-                });
+                if(mmSocket.isConnected()) {
+                    connectionStatus.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            connectionStatus.setText("Status: Connected");
+                            connectionStatus.setTextColor(Color.GREEN);
+                            }
+                    });
+                }else{
+                    startConnection.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            startConnection.setChecked(false);
+                        }
+                    });
+
+                    connectionStatus.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            connectionStatus.setText("Status: Connected");
+                            connectionStatus.setTextColor(Color.GREEN);
+                        }
+                    });
+                }
             }catch (IOException connectExeption){
                 try{
                     mmSocket.close();
                 }catch (IOException closeException){}
             }
-
+            mmtransactThread = new TransactionThread(mmSocket);
+            mmtransactThread.start();
         }
 
         public void cancel(){
             try {
                 mmSocket.close();
                 mmtransactThread.cancel();
-                connectionStatus.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        connectionStatus.setText("Status: Disconnected");
-                        connectionStatus.setTextColor(Color.RED);
-                    }
-                });
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -302,7 +378,9 @@ public class MainActivity extends AppCompatActivity{
             try{
                 tmpInStream = socket.getInputStream();
                 tmpOutStream = socket.getOutputStream();
-            }catch (IOException e){}
+            }catch (IOException e){
+                Log.e("transact", e.getMessage());
+            }
 
             mmInStream = tmpInStream;
             mmOutStream = tmpOutStream;
@@ -319,15 +397,15 @@ public class MainActivity extends AppCompatActivity{
                     bytes += mmInStream.read(buffer, bytes, buffer.length - bytes);
                     for(int i = begin; i <  bytes; i++){
                         mHandler.obtainMessage(MEASURE_DISTANCE, begin, i, buffer).sendToTarget();
-
                         begin = i + 1;
                         if(i == bytes - 1){
                             bytes = 0;
                             begin = 0;
                         }
                     }
+
                 }catch (Exception e){
-                    break;
+                    Log.e("transact",e.getMessage());
                 }
             }
         }
